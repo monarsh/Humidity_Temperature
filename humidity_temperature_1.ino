@@ -5,26 +5,22 @@
 #include "DHTesp.h"
 #include "ThingSpeak.h"
 
-#ifndef STASSID
-#define STASSID "Samsung A52s"
-#define STAPSK  "k!k!l@l@"
-#endif
-
 DHTesp dht;
-const char* ssid = STASSID;
-const char* pass = STAPSK;
-WiFiClient  client;
-
+WiFiClient client;
+const uint8_t dhtPin = 14;
+const uint8_t dhtGndPin = 12;
+const uint8_t interval = 20;
+const char* ssid = "IPB";
+const char* pass = "di8ITipb";
 unsigned long myChannelNumber = 1562422;
 const char * myWriteAPIKey = "CV3XBW6YVXDY5VPC";
-
 ComfortState cf;
-String comfortStatus;
+String comfort;
 String perception;
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Booting");
+  Serial.println("\n\nBooting");
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pass);
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
@@ -78,15 +74,31 @@ void setup() {
     }
   });
   ArduinoOTA.begin();
-  Serial.println("Ready");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-  dht.setup(0, DHTesp::DHT11);
-  //  dht.setup(0, DHTesp::DHT22);
+  dht.setup(dhtPin, DHTesp::DHT22);
   ThingSpeak.begin(client);
+  pinMode(dhtGndPin, OUTPUT);
+  digitalWrite(dhtGndPin, HIGH);
+  delay(1000);
+  digitalWrite(dhtGndPin, LOW);
+  Serial.println("Ready");
 }
 
 void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.print("Attempting to connect to Wifi");
+    while (WiFi.status() != WL_CONNECTED) {
+      WiFi.begin(ssid, pass);
+      Serial.print(".");
+      delay(5000);
+    }
+    Serial.println("\nWifi connected.");
+  }
+
+  for (uint8_t i = 1; i <= interval; i++) {
+    ArduinoOTA.handle();
+    delay(1000);
+  }
+
   delay(dht.getMinimumSamplingPeriod());
 
   float humidity = dht.getHumidity();
@@ -96,34 +108,34 @@ void loop() {
 
   switch (cf) {
     case Comfort_OK:
-      comfortStatus = "Comfort_OK";
+      comfort = "OK";
       break;
     case Comfort_TooHot:
-      comfortStatus = "Comfort_TooHot";
+      comfort = "Too Hot";
       break;
     case Comfort_TooCold:
-      comfortStatus = "Comfort_TooCold";
+      comfort = "Too Cold";
       break;
     case Comfort_TooDry:
-      comfortStatus = "Comfort_TooDry";
+      comfort = "Too Dry";
       break;
     case Comfort_TooHumid:
-      comfortStatus = "Comfort_TooHumid";
+      comfort = "Too Humid";
       break;
     case Comfort_HotAndHumid:
-      comfortStatus = "Comfort_HotAndHumid";
+      comfort = "Hot And Humid";
       break;
     case Comfort_HotAndDry:
-      comfortStatus = "Comfort_HotAndDry";
+      comfort = "Hot And Dry";
       break;
     case Comfort_ColdAndHumid:
-      comfortStatus = "Comfort_ColdAndHumid";
+      comfort = "Cold And Humid";
       break;
     case Comfort_ColdAndDry:
-      comfortStatus = "Comfort_ColdAndDry";
+      comfort = "Cold And Dry";
       break;
     default:
-      comfortStatus = "Comfort_Unknown";
+      comfort = "Unknown";
       break;
   };
 
@@ -131,61 +143,53 @@ void loop() {
 
   switch (cp) {
     case 0:
-      perception = "Perception_Dry";
+      perception = "Dry";
       break;
     case 1:
-      perception = "Perception_VeryComfortable";
+      perception = "Very Comfortable";
       break;
     case 2:
-      perception = "Perception_Comfortable";
+      perception = "Comfortable";
       break;
     case 3:
-      perception = "Perception_Ok";
+      perception = "OK";
       break;
     case 4:
-      perception = "Perception_Uncomfortable";
+      perception = "Uncomfortable";
       break;
     case 5:
-      perception = "Perception_QuiteUncomfortable";
+      perception = "Quite Uncomfortable";
       break;
     case 6:
-      perception = "Perception_VeryUncomfortabl";
+      perception = "Very Uncomfortable";
       break;
     case 7:
-      perception = "Perception_SevereUncomfortable";
+      perception = "Severe Uncomfortable";
       break;
     default:
-      perception = "Perception_Unknown";
+      perception = "Unknown";
       break;
   };
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.print("Attempting to connect to SSID: ");
-    Serial.println(STASSID);
-    while (WiFi.status() != WL_CONNECTED) {
-      WiFi.begin(ssid, pass);
-      Serial.print(".");
-      delay(5000);
-    }
-    Serial.println("\nConnected.");
-  }
+  char sts[255] = {0};
+  char Log[255] = {0};
+  IPAddress ip = WiFi.localIP();
+  sprintf(Log, "Local IP Address: %u.%u.%u.%u\nTemperature: %0.2f Celcius\nHumidity: %0.2f %c\nComfort: %s\nPerception: %s\n\n",
+          ip[0], ip[1], ip[2], ip[3], temperature, humidity, '%', &comfort[0], &perception[0]);
+  sprintf(sts, "Comfort: %s || Perception: %s || Local IP Address: %u.%u.%u.%u", &comfort[0], &perception[0], ip[0], ip[1], ip[2], ip[3]);
+  Serial.print(Log);
 
   ThingSpeak.setField(1, temperature);
   ThingSpeak.setField(2, humidity);
   ThingSpeak.setField(3, cr);
   ThingSpeak.setField(4, cp);
-  ThingSpeak.setStatus(comfortStatus + ", " + perception);
+  ThingSpeak.setStatus(sts);
 
   int x = ThingSpeak.writeFields(myChannelNumber, myWriteAPIKey);
   if (x == 200) {
-    Serial.println("Channel update successful.");
+    Serial.print("Channel update successful\n\n");
   }
   else {
-    Serial.println("Problem updating channel. HTTP error code " + String(x));
-  }
-
-  for (uint8_t i = 1; i <= 20; i++) {
-    ArduinoOTA.handle();
-    delay(1000);
+    Serial.print("Problem updating channel. HTTP error code " + String(x) + "\n\n");
   }
 }
