@@ -9,9 +9,14 @@ DHTesp dht;
 WiFiClient client;
 const uint8_t dhtPin = 14;
 const uint8_t dhtGndPin = 12;
-const uint8_t interval = 20;
+const uint8_t interval = 60;
 const char* ssid = "IPB";
 const char* pass = "di8ITipb";
+const char* deviceName = "loc-2";
+IPAddress staticIP(192, 168, 0, 4);
+IPAddress subnet(255, 255, 255, 0);
+IPAddress gateway(192, 168, 0, 1);
+IPAddress dns(192, 168, 0, 1);
 unsigned long myChannelNumber = 1567804;
 const char * myWriteAPIKey = "BRKMKOUAARRUJSZB";
 ComfortState cf;
@@ -21,8 +26,11 @@ String perception;
 void setup() {
   Serial.begin(115200);
   Serial.println("\n\nBooting");
-  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  WiFi.hostname(deviceName);
+  WiFi.config(staticIP, gateway, subnet, dns);
   WiFi.begin(ssid, pass);
+  WiFi.mode(WIFI_STA);
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
     delay(5000);
@@ -87,7 +95,11 @@ void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.print("Attempting to connect to Wifi");
     while (WiFi.status() != WL_CONNECTED) {
+      WiFi.disconnect();
+      WiFi.hostname(deviceName);
+      WiFi.config(staticIP, gateway, subnet, dns);
       WiFi.begin(ssid, pass);
+      WiFi.mode(WIFI_STA);
       Serial.print(".");
       delay(5000);
     }
